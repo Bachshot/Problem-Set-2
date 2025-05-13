@@ -14,94 +14,89 @@ classdef solve
     methods(Static)
         %% Solve the model using VFI. 
         
-        function sol = firm_problem(par)            
-            %% Structure array for model solution.
+        function sol = firm_problem(par)
+            %% Initialization
+            v0 = zeros(par.klen, par.Alen, par.Blen); % Initial guess
+
+            v1 = nan(par.klen, par.Alen, par.Blen);
+            k1 = nan(par.klen, par.Alen, par.Blen);
+            B1 = nan(par.klen, par.Alen, par.Blen);
             
-            sol = struct();
-            
-            %% Model parameters, grids and functions.
-            
-            beta = par.beta; % Discount factor.
-            delta = par.delta; % Depreciation rate.
-
-            klen = par.klen; % Grid size for k.
-            kgrid = par.kgrid; % Grid for k (state and choice).
-
-            Alen = par.Alen; % Grid size for A.
-            Agrid = par.Agrid; % Grid for A.
-            pmat = par.pmat; % Transition matrix for A.
-
-            %% Value Function iteration.
-
-            v0 = zeros(klen,Alen); % Guess of value function is zero profit.
-
-            v1 = nan(klen,Alen); % Container for V.
-            k1 = nan(klen,Alen); % Container for K'.
-            i1 = nan(klen,Alen); % Container for i.
-            r1 = nan(klen,Alen); % Container for revenue.
-            e1 = nan(klen,Alen); % Container for investment expenditure.
-            p1 = nan(klen,Alen); % Container for profit.
-
             crit = 1e-6;
-            maxiter = 10000;
+            maxiter = 1000;
             diff = 1;
             iter = 0;
+
+            fprintf('--- Starting Value Function Iteration with Financial Constraints ---\n\n')
             
-            fprintf('------------Beginning Value Function Iteration.------------\n\n')
-            
-            while diff > crit && iter < maxiter % Iterate on the Bellman Equation until convergence.
-                
-                for p = 1:klen % Loop over the K-states.
-                    for j = 1:Alen % Loop over the A-states.
+            %% Value Function Iteration
+            while diff > crit && iter < maxiter
+                for ki = 1:par.klen
+                    for Ai = 1:par.Alen
+                        for Bi = 1:par.Blen
 
-                        % Macro variables.
-                        rev = model.production(Agrid(j),kgrid(p),par); % Revenue given A and K.
-                        exp = model.total_cost(kgrid(p),par); % Total investment expenditure given K.
-                        prof = rev-exp; % Profit.
-                        invest = par.kgrid-(1-delta).*kgrid(p); % Investment in new capital.
+                            k_current = par.kgrid(ki);
+                            A_current = par.Agrid(Ai);
+                            B_current = par.Bgrid(Bi);
 
-                        % Solve the maximization problem.
-                        ev = v0*pmat(j,:)'; %  The next-period value function is the expected value function over each possible next-period A, conditional on the current state j.
-                        vall = prof + beta*ev; % Compute the value function for each choice of K', given K.
-                        vall(prof<0) = -inf; % Set the value function to negative infinity when profit < 0.
-                        [vmax,ind] = max(vall); % Maximize: vmax is the maximized firm value; ind is where it is in the grid.
-                    
-                        % Store values.
-                        v1(p,j) = vmax; % Maximized firm value.
-                        k1(p,j) = kgrid(ind); % Optimal K'.
-                        i1(p,j) = invest(ind); % Optimal i.
-                        r1(p,j) = rev; % Total revenue.
-                        e1(p,j) = exp(ind); % Total cost.
-                        p1(p,j) = prof(ind); % Profits.
+                            v_temp = -inf;
+                            k_opt = 0;
+                            B_opt = 0;
 
+                            for kj = 1:par.klen
+                                for Bj = 1:par.Blen
+
+                                    k_next = par.kgrid(kj);
+                                    B_next = par.Bgrid(Bj);
+
+                                    % Check borrowing constraints
+                                    if abs(B_next) <= par.Bmax
+
+                                        % Profit calculation
+                                        [profit, borrowing_next] = model.firm_profit(A_current, k_current, B_current, k_next, B_next, par);
+
+                                        % Expected continuation value
+                                        EV = 0;
+                                        for Aj = 1:par.Alen
+                                            EV = EV + par.pmat(Ai, Aj) * v0(kj, Aj, Bj);
+                                        end
+
+                                        value = profit + par.beta * EV;
+
+                                        % Update if higher value is found
+                                        if value > v_temp
+                                            v_temp = value;
+                                            k_opt = k_next;
+                                            B_opt = borrowing_next;
+                                        end
+                                    end
+                                end
+                            end
+
+                            v1(ki, Ai, Bi) = v_temp;
+                            k1(ki, Ai, Bi) = k_opt;
+                            B1(ki, Ai, Bi) = B_opt;
+
+                        end
                     end
                 end
                 
-                diff = norm(v1-v0); % Check for convergence.
-                v0 = v1; % Update guess of v.
-                
-                iter = iter + 1; % Update counter.
-                
-                % Print counter.
-                if mod(iter,25) == 0
-                    fprintf('Iteration: %d.\n',iter)
-                end
+                diff = norm(v1(:)-v0(:));
+                v0 = v1;
+                iter = iter + 1;
 
+                if mod(iter,10)==0
+                    fprintf('Iteration: %d, Diff: %g\n', iter, diff)
+                end
             end
-                
-            fprintf('\nConverged in %d iterations.\n\n',iter)
-            
-            fprintf('------------End of Value Function Iteration.------------\n')
-            
-            %% Macro variables, value, and policy functions.
-            
-            sol.v = v1; % Firm value.
-            sol.k = k1; % Capital policy function.
-            sol.i = i1; % Investment policy function.
-            sol.r = r1; % Revenue function.
-            sol.e = e1; % Investment expenditure function.
-            sol.p = p1; % Profit function.
-            
+
+            fprintf('\nConverged after %d iterations.\n', iter)
+
+            %% Store results
+            sol = struct();
+            sol.v = v1;
+            sol.k = k1;
+            sol.B = B1;
         end
         
     end
