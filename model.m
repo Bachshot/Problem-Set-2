@@ -14,115 +14,99 @@ classdef model
     methods(Static)
         %% Set up structure array for model parameters and set the simulation parameters.
         
-        function par = setup()            
+function par = setup(firm_type)
             %% Structure array for model parameters.
-            
             par = struct();
             
-            %% Technology.
-
-            par.beta = 0.96; % Discount factor.
-            par.alpha = 0.33; % Capital's share (typical Cobb-Douglas).
-            par.delta = 0.08; % Depreciation rate.
+            %% Economic parameters
+            par.beta = 0.96;            % Discount factor
+            par.alpha = 0.33;           % Capital's share (Cobb-Douglas)
+            par.delta = 0.08;           % Depreciation rate
+            par.gamma = 0.10;           % Adjustment cost parameter
+            par.r = 0.05;               % Interest rate on debt
             
-            assert(par.delta >= 0.0 && par.delta <= 1.0,'The depreciation rate should be from 0 to 1.\n')
-            assert(par.beta > 0.0 && par.beta < 1.0,'Discount factor should be between 0 and 1.\n')
-            assert(par.alpha > 0.0 && par.alpha < 1.0,'Capital share of income should be between 0 and 1. \n')
+            %% Financial constraints (firm-specific)
+            if strcmp(firm_type, 'small')
+                par.Bmax = 10;          % Tight borrowing limit for small firms
+            elseif strcmp(firm_type, 'large')
+                par.Bmax = 100;         % Loose borrowing limit for large firms
+            else
+                error('Specify firm type as either "small" or "large".');
+            end
 
-            %% Prices, Income, and Costs.
+            %% Productivity shocks
+            par.sigma_eps = 0.07;       % Std. deviation of productivity shocks
+            par.rho = 0.85;             % Persistence of AR(1)
+            par.mu = 0;                 % Mean of productivity
 
-            par.p = 1.00; % Price of investment.
-            par.gamma = 1.00; % Speed of adjustment; cost function coefficient.
+            %% Simulation parameters
+            par.seed = 2025;
+            par.T = 1000;
 
-            par.sigma_eps = 0.07; % Std. dev of productivity shocks.
-            par.rho = 0.85; % Persistence of AR(1) process.
-            par.mu = 0.0; % Intercept of AR(1) process.
-
-            assert(par.gamma >= 0.0,'The cost function coefficient should be non-negative.\n')
-            assert(par.p > 0.0,'The price of investment should be positive.\n')
-
-            assert(par.sigma_eps > 0,'The standard deviation of the shock must be positive.\n')
-            assert(abs(par.rho) < 1,'The persistence must be less than 1 in absolute value so that the series is stationary.\n')
-
-            %% Simulation parameters.
-
-            par.seed = 2025; % Seed for simulation.
-            par.T = 300; % Number of time periods.
-
+            %% Generate grids
+            par = model.gen_grids(par);
         end
-        
-        %% Generate state grids.
-        
+
+        %% Generate state grids
         function par = gen_grids(par)
-            %% Capital grid.
+            %% Capital grid
+            par.klen = 300;
+            par.kmax = 30.0;
+            par.kmin = 1e-4;
+            par.kgrid = linspace(par.kmin, par.kmax, par.klen)';
+            
+            %% Productivity grid (Tauchen method)
+            par.Alen = 7;
+            par.m = 3;
+            [Agrid, pmat] = model.tauchen(par.mu, par.rho, par.sigma_eps, par.Alen, par.m);
+            par.Agrid = exp(Agrid);
+            par.pmat = pmat;
+            
+            %% Debt grid (explicitly added determinant)
+            par.Blen = 50;
+            par.Bgrid = linspace(-par.Bmax, par.Bmax, par.Blen)';
+        end
 
-            par.klen = 300; % Grid size for a.
-            par.kmax = 30.0; % Upper bound for a.
-            par.kmin = 1e-4; % Minimum a.
-            
-            assert(par.klen > 5,'Grid size for k should be positive and greater than 5.\n')
-            assert(par.kmax > par.kmin,'Minimum k should be less than maximum value.\n')
-            
-            par.kgrid = linspace(par.kmin,par.kmax,par.klen)'; % Equally spaced, linear grid for a and a'.
-                
-            %% Discretized income process.
-                  
-            par.Alen = 7; % Grid size for y.
-            par.m = 3; % Scaling parameter for Tauchen.
-            
-            assert(par.Alen > 3,'Grid size for A should be positive and greater than 3.\n')
-            assert(par.m > 0,'Scaling parameter for Tauchen should be positive.\n')
-            
-            [Agrid,pmat] = model.tauchen(par.mu,par.rho,par.sigma_eps,par.Alen,par.m); % Tauchen's Method to discretize the AR(1) process for log productivity.
-            par.Agrid = exp(Agrid); % The AR(1) is in logs so exponentiate it to get A.
-            par.pmat = pmat; % Transition matrix.
-        
+        %% Tauchen method
+        function [y, pi] = tauchen(mu, rho, sigma, N, m)
+            ar_mean = mu/(1-rho);
+            ar_sd = sigma / sqrt(1-rho^2);
+            y1 = ar_mean - m * ar_sd;
+            yn = ar_mean + m * ar_sd;
+            y = linspace(y1, yn, N);
+            d = y(2) - y(1);
+
+            ymatk = repmat(y, N, 1);
+            ymatj = mu + rho * ymatk';
+
+            pi = normcdf(ymatk, ymatj - d/2, sigma) - normcdf(ymatk, ymatj + d/2, sigma);
+            pi(:,1) = normcdf(y(1), mu + rho*y - d/2, sigma);
+            pi(:,N) = 1 - normcdf(y(N), mu + rho*y + d/2, sigma);
         end
-        
-        %% Tauchen's Method
-        
-        function [y,pi] = tauchen(mu,rho,sigma,N,m)
-            %% Construct equally spaced grid.
-        
-            ar_mean = mu/(1-rho); % The mean of a stationary AR(1) process is mu/(1-rho).
-            ar_sd = sigma/((1-rho^2)^(1/2)); % The std. dev of a stationary AR(1) process is sigma/sqrt(1-rho^2)
-            
-            y1 = ar_mean-(m*ar_sd); % Smallest grid point is the mean of the AR(1) process minus m*std.dev of AR(1) process.
-            yn = ar_mean+(m*ar_sd); % Largest grid point is the mean of the AR(1) process plus m*std.dev of AR(1) process.
-            
-	        y = linspace(y1,yn,N); % Equally spaced grid.
-            d = y(2)-y(1); % Step size.
-	        
-	        %% Compute transition probability matrix from state j (row) to k (column).
-        
-            ymatk = repmat(y,N,1); % States next period.
-            ymatj = mu+rho*ymatk'; % States this period.
-        
-	        pi = normcdf(ymatk,ymatj-(d/2),sigma) - normcdf(ymatk,ymatj+(d/2),sigma); % Transition probabilities to state 2, ..., N-1.
-	        pi(:,1) = normcdf(y(1),mu+rho*y-(d/2),sigma); % Transition probabilities to state 1.
-	        pi(:,N) = 1 - normcdf(y(N),mu+rho*y+(d/2),sigma); % Transition probabilities to state N.
-	        
+
+        %% Revenue (production) function
+        function output = production(A, k, par)
+            output = A .* k .^ par.alpha;
         end
-        
-        %% Revenue function.
-        
-        function output = production(A,k,par)
-            %% Revenue function.
-            
-            output = A.*k.^par.alpha; % Cobb-Douglas production.
-                        
+
+        %% Cost function (adjustment costs + investment)
+        function cost = total_cost(k_next, k, par)
+            invest = k_next - (1 - par.delta) .* k;
+            adj_cost = (par.gamma / 2) .* ((invest ./ k) .^ 2) .* k;
+            cost = adj_cost + invest;
         end
-        
-        %% Cost function.
-        
-        function cost = total_cost(k,par)
-            %% Convex adjustment cost.
-            
-            invest = par.kgrid-(1-par.delta).*k;
-            adj_cost = (par.gamma/2).*((invest./k).^2).*k; % Convex adjustment cost.
-            cost = adj_cost + par.p*invest; % Total investment cost.
-                        
+
+        %% Firm optimization problem (including borrowing constraint)
+        function [profit, borrowing_next] = firm_profit(A, k, B, k_next, B_next, par)
+            rev = model.production(A, k, par);
+            cost = model.total_cost(k_next, k, par);
+            financial_cost = (1 + par.r) .* B - B_next;
+
+            profit = rev - cost - financial_cost;
+
+            % Enforce borrowing constraint
+            borrowing_next = min(max(B_next, -par.Bmax), par.Bmax);
         end
-        
+
     end
 end
