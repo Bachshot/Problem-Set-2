@@ -22,8 +22,8 @@ classdef model
             %% Technology.
 
             par.beta = 0.96; % Discount factor.
-            par.alpha = 0.6; % Capital's share of income.
-            par.delta = 0.6; % Depreciation rate.
+            par.alpha = 0.33; % Capital's share (typical Cobb-Douglas).
+            par.delta = 0.08; % Depreciation rate.
             
             assert(par.delta >= 0.0 && par.delta <= 1.0,'The depreciation rate should be from 0 to 1.\n')
             assert(par.beta > 0.0 && par.beta < 1.0,'Discount factor should be between 0 and 1.\n')
