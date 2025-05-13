@@ -14,127 +14,53 @@ classdef my_graph
     methods(Static)
         %% Plot value and policy functions.
         
-        function [] = plot_policy(par,sol,sim)
-            %% Plot capital policy function.
+        function plot_results(par, sol, sim, firm_type)
 
-            figure(1)
-            
-            plot(par.kgrid,sol.k)
-                xlabel({'$k_t$'},'Interpreter','latex')
-                ylabel({'$k_{t+1}$'},'Interpreter','latex') 
-            title('Capital Policy Function','Interpreter','latex')
-            
-            %% Plot investment policy function.
-            
-            figure(2)
-            
-            plot(par.kgrid,sol.i)
-                xlabel({'$k_t$'},'Interpreter','latex')
-                ylabel({'$i_{t}$'},'Interpreter','latex') 
-            title('Investment Policy Function','Interpreter','latex')
-            
-            %% Plot revenue function.
-            
-            figure(3)
-            
-            plot(par.kgrid,sol.r)
-                xlabel({'$k_t$'},'Interpreter','latex')
-                ylabel({'$r_{t}$'},'Interpreter','latex') 
-            title('Revenue Function','Interpreter','latex')
-            
-            %% Plot expenditure function.
-            
-            figure(4)
-            
-            plot(par.kgrid,sol.e)
-                xlabel({'$k_t$'},'Interpreter','latex')
-                ylabel({'$C(k_{t+1},A_t,k_t)+pI_t$'},'Interpreter','latex') 
-            title('Expenditure Function','Interpreter','latex')
-            
-            %% Plot profit function.
-            
-            figure(5)
-            
-            plot(par.kgrid,sol.p)
-                xlabel({'$k_t$'},'Interpreter','latex')
-                ylabel({'$C(k_{t+1},A_t,k_t)+pi_t$'},'Interpreter','latex') 
-            title('Profit Function','Interpreter','latex')
-            
-            %% Plot value function.
-            
-            figure(6)
-            
-            plot(par.kgrid,sol.v)
-                xlabel({'$k_t$'},'Interpreter','latex')
-                ylabel({'$v_{t}$'},'Interpreter','latex') 
-            title('Value Function','Interpreter','latex')
-            
-            %% Plot simulated revenue shocks.
+            %% Plot Capital Policy Function
+            figure;
+            surf(par.Agrid, par.kgrid, squeeze(sol.k(:,:,round(par.Blen/2))));
+            xlabel('Productivity (A)'); ylabel('Current Capital (k_t)'); zlabel('Next-period Capital (k_{t+1})');
+            title(['Capital Policy Function - ', firm_type, ' firms']);
 
-            tgrid = linspace(1,par.T,par.T);
+            %% Plot Debt Policy Function
+            figure;
+            surf(par.Agrid, par.kgrid, squeeze(sol.B(:,:,round(par.Blen/2))));
+            xlabel('Productivity (A)'); ylabel('Current Capital (k_t)'); zlabel('Next-period Debt (B_{t+1})');
+            title(['Debt Policy Function - ', firm_type, ' firms']);
 
-            figure(7)
+            %% Plot Simulated Capital
+            figure;
+            plot(sim.ksim);
+            xlabel('Time Period'); ylabel('Capital');
+            title(['Simulated Capital Dynamics - ', firm_type, ' firms']);
 
-            plot(tgrid,sim.Asim)
-                xlabel({'Time'},'Interpreter','latex')
-                ylabel({'$A^{sim}_t$'},'Interpreter','latex') 
-            title('Simulated Revenue Shocks')
+            %% Plot Simulated Debt
+            figure;
+            plot(sim.Bsim);
+            xlabel('Time Period'); ylabel('Debt');
+            title(['Simulated Debt Dynamics - ', firm_type, ' firms']);
 
-            %% Plot simulated capital choice.
+            %% Plot Simulated Investment
+            figure;
+            plot(sim.isim);
+            xlabel('Time Period'); ylabel('Investment');
+            title(['Simulated Investment Dynamics - ', firm_type, ' firms']);
 
-            figure(8)
-
-            plot(tgrid,sim.ksim)
-                xlabel({'Time'},'Interpreter','latex')
-                ylabel({'$k^{sim}_t$'},'Interpreter','latex') 
-            title('Simulated Capital Choice')
-
-            %% Plot simulated investment expenditure.
-
-            figure(9)
-
-            plot(tgrid,sim.esim)
-                xlabel({'Time'},'Interpreter','latex')
-                ylabel({'$C(k^{sim}_{t+1},A^{sim}_t,k^{sim}_t)+pi^{sim}_t$'},'Interpreter','latex') 
-            title('Simulated Investment Expenditure')
-
-            %% Plot simulated investment.
-
-            figure(9)
-
-            plot(tgrid,sim.isim)
-                xlabel({'Time'},'Interpreter','latex')
-                ylabel({'$i^{sim}_t$'},'Interpreter','latex') 
-            title('Simulated Investment')
-
-            %% Plot simulated revenue.
-
-            figure(10)
-
-            plot(tgrid,sim.rsim)
-                xlabel({'Time'},'Interpreter','latex')
-                ylabel({'$y^{sim}_t$'},'Interpreter','latex') 
-            title('Simulated Revenue')
-
-            %% Plot simulated profit.
-
-            figure(11)
-
-            plot(tgrid,sim.psim)
-                xlabel({'Time'},'Interpreter','latex')
-                ylabel({'$\pi^{sim}_t$'},'Interpreter','latex') 
-            title('Simulated Profit')
-
-            %% Plot simulated value function.
-
-            figure(12)
-
-            plot(tgrid,sim.vsim)
-                xlabel({'Time'},'Interpreter','latex')
-                ylabel({'$v^{sim}_t$'},'Interpreter','latex') 
-            title('Simulated Firm Value')
-
+            %% Plot Productivity Shocks
+            figure;
+            plot(sim.Asim);
+            xlabel('Time Period'); ylabel('Productivity Shock');
+            title(['Simulated Productivity Shocks - ', firm_type, ' firms']);
         end
-        
+
+        %% Heatmap of Average Capital
+        function heatmap_capital(gamma_values, delta_values, avg_capital)
+            figure;
+            imagesc(gamma_values, delta_values, avg_capital);
+            colorbar;
+            xlabel('\gamma (Adjustment Cost)'); ylabel('\delta (Depreciation Rate)');
+            title('Heatmap of Average Simulated Capital');
+        end
+
     end
 end
